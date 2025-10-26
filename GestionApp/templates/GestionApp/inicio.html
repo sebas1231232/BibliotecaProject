@@ -1,0 +1,106 @@
+{% extends 'GestionApp/base.html' %}
+{% block title %}Inicio y Búsqueda{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+
+    <aside class="col-span-1 bg-white p-6 rounded-lg shadow-md h-fit">
+        <h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">Filtrar por</h3>
+        
+        <div class="mb-6">
+            <h4 class="font-semibold mb-2">Categoría</h4>
+            <ul class="space-y-1">
+                {% for categoria in categorias %}
+                <li>
+                    <a href="?q={{ query_params.q|default:'' }}&categoria={{ categoria.id }}&editorial={{ query_params.editorial|default:'' }}" 
+                       class="text-blue-600 hover:underline {% if query_params.categoria == categoria.id|stringformat:'s' %}font-bold text-black{% endif %}">
+                        {{ categoria.tipo_categoria }}
+                    </a>
+                </li>
+                {% empty %}
+                 <li><span class="text-sm text-gray-400">No hay categorías.</span></li>
+                {% endfor %}
+                {% if query_params.categoria %}
+                <li><a href="?q={{ query_params.q|default:'' }}&editorial={{ query_params.editorial|default:'' }}" class="text-xs text-red-500 mt-2 block">Quitar filtro</a></li>
+                {% endif %}
+            </ul>
+        </div>
+
+        <div>
+            <h4 class="font-semibold mb-2">Editorial</h4>
+            <ul class="space-y-1">
+                {% for editorial in editoriales %}
+                <li>
+                    <a href="?q={{ query_params.q|default:'' }}&categoria={{ query_params.categoria|default:'' }}&editorial={{ editorial.id }}"
+                       class="text-blue-600 hover:underline {% if query_params.editorial == editorial.id|stringformat:'s' %}font-bold text-black{% endif %}">
+                        {{ editorial.nombre_editorial }}
+                    </a>
+                </li>
+                {% endfor %}
+                 {% if query_params.editorial %}
+                <li><a href="?q={{ query_params.q|default:'' }}&categoria={{ query_params.categoria|default:'' }}" class="text-xs text-red-500 mt-2 block">Quitar filtro</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </aside>
+
+    <div class="col-span-1 lg:col-span-3">
+        
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <form method="GET" action="{% url 'inicio' %}">
+                <input type="hidden" name="categoria" value="{{ query_params.categoria|default:'' }}">
+                <input type="hidden" name="editorial" value="{{ query_params.editorial|default:'' }}">
+                <div class="flex gap-x-2">
+                    <input 
+                        type="text" 
+                        name="q" 
+                        value="{{ query_params.q|default:'' }}"
+                        class="flex-grow block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                        placeholder="Buscar por título o autor de libro...">
+                    <button type="submit" class="rounded-md bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Buscar</button>
+                </div>
+            </form>
+        </div>
+
+        <div>
+            <h3 class="text-2xl font-bold text-slate-600 mb-4">Resultados</h3>
+            <div id="search-results-container" class="bg-white p-4 rounded-lg shadow-md space-y-3">
+                {% for libro in resultados_libros %}
+                    <div class="flex items-center justify-between p-2 rounded-md hover:bg-gray-50">
+                        <div>
+                            <p class="font-medium text-slate-900">{{ libro.titulo }}</p>
+                            <p class="text-sm text-gray-500">{{ libro.autor }}</p>
+                        </div>
+                        <button class="add-to-seleccion-btn text-xs bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md hover:bg-blue-200 font-semibold" data-isbn="{{ libro.isbn }}">
+                            Añadir a Selección
+                        </button>
+                    </div>
+                {% empty %}
+                    <p class="text-slate-500 p-2">No se encontraron libros que coincidan con los filtros aplicados.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const resultadosContainer = document.getElementById('search-results-container');
+        if (resultadosContainer) {
+            resultadosContainer.addEventListener('click', function(e) {
+                if (e.target && e.target.classList.contains('add-to-seleccion-btn')) {
+                    const btn = e.target;
+                    const isbn = btn.dataset.isbn;
+                    let seleccion = window.getSeleccion();
+                    if (!seleccion.includes(isbn)) {
+                        seleccion.push(isbn);
+                        window.saveSeleccion(seleccion);
+                    }
+                }
+            });
+        }
+    });
+    </script>
+{% endblock %}

@@ -1,0 +1,214 @@
+{% extends 'GestionApp/base.html' %}
+{% block title %}Gestión de Préstamos{% endblock %}
+{% block content %}
+
+<div id="nuevo-prestamo-seccion">
+    <h2 class="text-3xl font-bold text-slate-700 mb-6">Nuevo Préstamo</h2>
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <div id="seleccion-checkout-container">
+        </div>
+    </div>
+</div>
+
+<div id="historial-de-prestamos-seccion" class="mt-12">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <h2 class="text-3xl font-bold text-slate-700">Historial de Préstamos</h2>
+        <div class="flex items-center gap-x-2">
+            <a href="?estado=activos&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'activos' %}bg-blue-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Activos</a>
+            <a href="?estado=vencidos&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'vencidos' %}bg-yellow-500 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Vencidos</a>
+            <a href="?estado=devueltos&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'devueltos' %}bg-gray-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Devueltos</a>
+        </div>
+    </div>
+    
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <form method="GET" action="{% url 'lista_prestamos' %}">
+            <input type="hidden" name="estado" value="{{ estado_filtro|default:'activos' }}">
+            <div class="flex items-center gap-x-2">
+                <select name="campo" class="p-2 border border-gray-300 rounded-md shadow-sm">
+                    <option value="usuario" {% if campo_seleccionado == 'usuario' %}selected{% endif %}>Usuario</option>
+                    <option value="libro" {% if campo_seleccionado == 'libro' %}selected{% endif %}>Título de Libro</option>
+                </select>
+                <input 
+                    type="text" 
+                    name="q" 
+                    value="{{ query|default:'' }}"
+                    class="flex-grow block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                    placeholder="Buscar...">
+                <button type="submit" class="rounded-md bg-slate-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-500">Buscar</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="border-b"><th class="py-2 px-2">ID</th><th class="py-2 px-2">Libros</th><th class="py-2 px-2">Usuario</th><th class="py-2 px-2">Fechas</th><th class="py-2 px-2">Estado</th><th class="py-2 px-2">Acciones</th></tr>
+            </thead>
+            <tbody id="historial-prestamos-body">
+                {% for prestamo in prestamos %}
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="py-3 px-2 text-sm text-gray-600">{{ prestamo.id_prestamo }}</td>
+                    <td class="py-3 px-2 font-medium">
+                        <ul class="list-disc list-inside">
+                        {% for detalle in prestamo.detalleprestamo_set.all %}
+                            <li>{{ detalle.libro.titulo }}</li>
+                        {% endfor %}
+                        </ul>
+                    </td>
+                    <td class="py-3 px-2">{{ prestamo.usuario.nombre_completo }}</td>
+                    <td class="py-3 px-2 text-sm">
+                        <p><b>Préstamo:</b> {{ prestamo.fecha_prestamo|date:"Y-m-d" }}</p>
+                        <p><b>Vencimiento:</b> {{ prestamo.fecha_vencimiento|date:"Y-m-d" }}</p>
+                        {% if prestamo.fecha_devolucion %}<p><b>Devolución:</b> {{ prestamo.fecha_devolucion|date:"Y-m-d" }}</p>{% endif %}
+                    </td>
+                    <td class="py-3 px-2">
+                        {% if prestamo.fecha_devolucion %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-800">Devuelto</span>
+                        {% elif prestamo.fecha_vencimiento < today %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-red-200 text-red-800">Vencido</span>
+                        {% else %}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-200 text-green-800">Activo</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-2">
+                        {% if not prestamo.fecha_devolucion %}
+                        <div class="flex items-center gap-x-2">
+                            <button class="btn-renovar text-xs bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-1 px-3 rounded" data-url="{% url 'renovar_prestamo' prestamo_id=prestamo.id_prestamo %}">Renovar</button>
+                            <button class="btn-devolucion text-xs bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-3 rounded" data-url="{% url 'devolucion_prestamo' prestamo_id=prestamo.id_prestamo %}">Devolver</button>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-10">No hay préstamos que coincidan con los filtros.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const checkoutContainer = document.getElementById('seleccion-checkout-container');
+    const historialTableBody = document.getElementById('historial-prestamos-body');
+
+    async function renderSeleccionCheckout() {
+        const seleccion = window.getSeleccion();
+        if (seleccion.length === 0) {
+            checkoutContainer.innerHTML = '<p class="text-slate-500">La selección está vacía. Añade libros desde la página de Inicio para continuar.</p>';
+            return;
+        }
+
+        checkoutContainer.innerHTML = '<p>Cargando...</p>';
+        try {
+            const [librosRes, usuariosRes] = await Promise.all([
+                fetch("{% url 'api_get_libros' %}", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+                    body: JSON.stringify({ isbns: seleccion })
+                }),
+                fetch("{% url 'api_get_usuarios' %}")
+            ]);
+
+            if (!librosRes.ok || !usuariosRes.ok) {
+                throw new Error('Error en la respuesta del servidor.');
+            }
+
+            const librosData = await librosRes.json();
+            const usuariosData = await usuariosRes.json();
+
+            const librosHtml = librosData.libros.map(libro => `
+                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span>${libro.titulo}</span>
+                    <button class="remove-from-seleccion-btn rounded-md bg-red-100 text-red-700 px-3 py-1 text-sm font-semibold hover:bg-red-200 hover:text-red-800" data-isbn="${libro.isbn}">Quitar</button>
+                </div>
+            `).join('');
+
+            const usuariosOptions = usuariosData.usuarios.map(user => `<option value="${user.id_usuario}">${user.nombre_completo}</option>`).join('');
+
+            checkoutContainer.innerHTML = `
+                <h3 class="text-xl font-semibold mb-4">Libros en la Selección</h3>
+                <div id="seleccion-libros-lista" class="space-y-1 mb-6 pb-6">${librosHtml}</div>
+                <form id="form-crear-prestamo">
+                    <div class="mb-4">
+                        <label for="usuario-select" class="block text-sm font-medium">Prestar a Usuario:</label>
+                        <select id="usuario-select" name="usuario_id" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">${usuariosOptions}</select>
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" class="rounded-md bg-green-600 px-6 py-2.5 text-sm font-semibold text-white">Confirmar Préstamo</button>
+                    </div>
+                </form>
+            `;
+
+            $('#usuario-select').select2({
+                placeholder: "Seleccione un usuario",
+                dropdownParent: $('#form-crear-prestamo')
+            });
+
+            document.getElementById('form-crear-prestamo').addEventListener('submit', handlePrestamoSubmit);
+            document.getElementById('seleccion-libros-lista').addEventListener('click', handleRemoveFromSeleccion);
+        } catch (error) {
+            checkoutContainer.innerHTML = `<p class="text-red-500">Error al cargar datos. ${error.message}</p>`;
+        }
+    }
+
+    function handleRemoveFromSeleccion(e) {
+        if (e.target && e.target.classList.contains('remove-from-seleccion-btn')) {
+            const isbnToRemove = e.target.dataset.isbn;
+            let seleccion = window.getSeleccion();
+            seleccion = seleccion.filter(isbn => isbn !== isbnToRemove);
+            window.saveSeleccion(seleccion);
+            renderSeleccionCheckout();
+        }
+    }
+
+    async function handlePrestamoSubmit(e) {
+        e.preventDefault();
+        const selectedUserId = document.getElementById('usuario-select').value;
+        if (!selectedUserId) {
+            alert("Por favor, seleccione un usuario.");
+            return;
+        }
+        try {
+            const response = await fetch("{% url 'prestamo_crear' %}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+                body: JSON.stringify({ usuario_id: selectedUserId, libros: window.getSeleccion() })
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert(data.message);
+                sessionStorage.removeItem('seleccionDePrestamo');
+                window.location.reload();
+            } else {
+                alert(`Error: ${data.error}`);
+            }
+        } catch (error) {
+            alert('Error de conexión.');
+        }
+    }
+
+    if (historialTableBody) {
+        historialTableBody.addEventListener('click', async function(e) {
+            const target = e.target.closest('button');
+            if (!target) return;
+            const url = target.dataset.url;
+            if (!url) return;
+            if (!confirm('¿Estás seguro de que deseas realizar esta acción?')) return;
+            try {
+                const response = await fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') }});
+                const data = await response.json();
+                alert(data.message || data.error);
+                if (data.success) { window.location.reload(); }
+            } catch (error) {
+                alert('Error de conexión.');
+            }
+        });
+    }
+
+    renderSeleccionCheckout();
+});
+</script>
+{% endblock %}

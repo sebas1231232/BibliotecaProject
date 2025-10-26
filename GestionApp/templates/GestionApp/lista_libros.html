@@ -1,0 +1,134 @@
+{% extends 'GestionApp/base.html' %}
+{% block title %}Catálogo de Libros{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h2 class="text-3xl font-bold text-slate-700">Catálogo de Libros</h2>
+    <button id="add-libro-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+        <i class="fas fa-plus mr-2"></i>Añadir Libro
+    </button>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+    <form method="GET" action="{% url 'lista_libros' %}">
+        <div class="flex items-center gap-x-2">
+            <select name="campo" class="p-2 border border-gray-300 rounded-md shadow-sm">
+                <option value="titulo" {% if campo_seleccionado == 'titulo' %}selected{% endif %}>Título</option>
+                <option value="autor" {% if campo_seleccionado == 'autor' %}selected{% endif %}>Autor</option>
+            </select>
+            <input 
+                type="text" 
+                name="q" 
+                value="{{ query|default:'' }}"
+                class="flex-grow block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                placeholder="Buscar...">
+            <button type="submit" class="rounded-md bg-slate-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-500">Buscar</button>
+        </div>
+    </form>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+    <table class="w-full text-left">
+        <thead>
+            <tr class="border-b"><th class="py-2 px-2">ISBN</th><th class="py-2 px-2">Título</th><th class="py-2 px-2">Autor</th><th class="py-2 px-2">Disponibles / Totales</th><th class="py-2 px-2">Acciones</th></tr>
+        </thead>
+        <tbody id="book-table-body">
+            {% for libro in libros %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="py-3 px-2 text-sm text-gray-600 font-semibold">{{ libro.isbn }}</td>
+                <td class="py-3 px-2 font-medium">{{ libro.titulo }}</td>
+                <td class="py-3 px-2">{{ libro.autor }}</td>
+                <td class="py-3 px-2">{{ libro.stock.copias_disponibles }} / {{ libro.stock.copias_totales }}</td>
+                <td class="py-3 px-2 space-x-2 whitespace-nowrap">
+                    <button data-url="{% url 'libro_editar' isbn=libro.isbn %}" class="edit-btn text-xs bg-green-500 text-white px-3 py-1.5 rounded-md hover:bg-green-600 font-semibold">Editar</button>
+                    <button data-url="{% url 'libro_eliminar' isbn=libro.isbn %}" class="delete-btn text-xs bg-red-500 text-white px-3 py-1.5 rounded-md hover:bg-red-600 font-semibold">Eliminar</button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center py-10">No se encontraron libros.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addLibroBtn = document.getElementById('add-libro-btn');
+    const bookTableBody = document.getElementById('book-table-body');
+
+    async function handleFormSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando...';
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': getCookie('csrftoken') }
+            });
+            const data = await response.json();
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                let errorText = "El formulario contiene errores:\n\n";
+                const errors = JSON.parse(data.errors);
+                for (const field in errors) {
+                    errorText += `- ${errors[field][0].message}\n`;
+                }
+                alert(errorText);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Guardar Libro';
+            }
+        } catch (err) {
+            alert('Error de conexión al intentar guardar.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Guardar Libro';
+        }
+    }
+
+    async function handleDelete(url) {
+        if (confirm('¿Estás seguro de que quieres eliminar este libro? Esta acción no se puede deshacer.')) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+                const data = await response.json();
+                alert(data.message || data.error);
+                if (data.success) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                alert('Error de conexión al eliminar.');
+            }
+        }
+    }
+
+    if (addLibroBtn) {
+        addLibroBtn.addEventListener('click', () => {
+            window.openFormModal("{% url 'libro_crear' %}", 'libro-form', handleFormSubmit);
+        });
+    }
+
+    if (bookTableBody) {
+        bookTableBody.addEventListener('click', function(e) {
+            const target = e.target.closest('button');
+            if (!target) return;
+            if (target.classList.contains('edit-btn')) {
+                window.openFormModal(target.dataset.url, 'libro-form', handleFormSubmit);
+            }
+            if (target.classList.contains('delete-btn')) {
+                handleDelete(target.dataset.url);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

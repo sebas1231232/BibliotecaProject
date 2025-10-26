@@ -1,0 +1,202 @@
+{% extends 'GestionApp/base.html' %}
+{% block title %}Reportes{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h2 class="text-3xl font-bold text-slate-700">Reportes Interactivos</h2>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow-md mb-8">
+    <p class="mb-4 text-slate-600">Utiliza las siguientes opciones para generar un reporte visual a medida. Los resultados aparecerán en el gráfico de abajo.</p>
+    <form id="report-generator-form" class="p-4 bg-slate-50 rounded-md">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="analizar_select" class="block text-sm font-medium text-gray-700">1. Analizar</label>
+                <select name="analizar" id="analizar_select" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                    <option value="libros">Libros</option>
+                    <option value="usuarios">Usuarios</option>
+                    <option value="actividad">Actividad General</option>
+                </select>
+            </div>
+            <div>
+                <label for="metrica_select" class="block text-sm font-medium text-gray-700">2. Métrica</label>
+                <select name="metrica" id="metrica_select" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></select>
+            </div>
+            <div id="agrupar_container" style="display: none;">
+                <label for="agrupar_select" class="block text-sm font-medium text-gray-700">3. Agrupar por</label>
+                <select name="agrupar_por" id="agrupar_select" class="mt-1 block w-full p-2 border border-gray-300 rounded-md"></select>
+            </div>
+            <div>
+                <label for="chart_type_select" class="block text-sm font-medium text-gray-700">4. Tipo de Gráfico</label>
+                <select name="chart_type" id="chart_type_select" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                    <option value="bar">Barras</option>
+                    <option value="pie">Torta</option>
+                    <option value="doughnut">Dona</option>
+                    <option value="line">Líneas</option>
+                </select>
+            </div>
+            <div class="md:col-span-2 lg:col-span-4 text-right">
+                <button type="submit" class="rounded-md bg-blue-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500">Generar Reporte</button>
+            </div>
+        </div>
+    </form>
+    <div class="mt-6 relative h-96">
+        <canvas id="customReportChart"></canvas>
+    </div>
+</div>
+
+<hr class="my-8 border-gray-300">
+
+<div class="bg-white p-6 rounded-lg shadow-md">
+    <h3 class="text-2xl font-bold text-slate-700 mb-4">Exportar Datos a CSV</h3>
+    <div class="flex flex-wrap gap-4">
+        <a href="{% url 'exportar_libros_csv' %}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            <i class="fas fa-file-csv mr-2"></i>Exportar Libros
+        </a>
+        <a href="{% url 'exportar_usuarios_csv' %}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            <i class="fas fa-file-csv mr-2"></i>Exportar Usuarios
+        </a>
+        <a href="{% url 'exportar_prestamos_csv' %}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            <i class="fas fa-file-csv mr-2"></i>Exportar Préstamos
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const reportOptions = {
+        libros: { metrics: { top_5: 'Top 5 más prestados', agrupado: 'Préstamos agrupados' }, groups: { agrupado: { categoria: 'Por Categoría', editorial: 'Por Editorial' }}},
+        usuarios: { metrics: { top_5_activos: 'Top 5 más activos (por préstamos)', mas_multados: 'Con más multas' }, groups: {}},
+        actividad: { metrics: { prestamos_mes: 'Préstamos por Mes', nuevos_usuarios_mes: 'Nuevos Usuarios por Mes' }, groups: {}}
+    };
+
+    const analizarSelect = document.getElementById('analizar_select');
+    const metricaSelect = document.getElementById('metrica_select');
+    const agruparContainer = document.getElementById('agrupar_container');
+    const agruparSelect = document.getElementById('agrupar_select');
+    const chartTypeSelect = document.getElementById('chart_type_select');
+    const reportForm = document.getElementById('report-generator-form');
+    const customChartCtx = document.getElementById('customReportChart').getContext('2d');
+    let customChart;
+    
+    const colorPalette = [
+        'rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)',
+        'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+        'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(255, 99, 255, 0.7)',
+        'rgba(100, 255, 100, 0.7)'
+    ];
+
+    function populateSelect(selectElem, options) {
+        selectElem.innerHTML = '';
+        for (const [value, text] of Object.entries(options)) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            selectElem.appendChild(option);
+        }
+    }
+
+    function updateGroupByOptions() {
+        const analizarValue = analizarSelect.value;
+        const metricaValue = metricaSelect.value;
+        const subject = reportOptions[analizarValue];
+        const groupOptions = subject && subject.groups ? subject.groups[metricaValue] : null;
+
+        if (groupOptions) {
+            populateSelect(agruparSelect, groupOptions);
+            agruparContainer.style.display = 'block';
+        } else {
+            agruparContainer.style.display = 'none';
+        }
+    }
+
+    function updateMetricOptions() {
+        const analizarValue = analizarSelect.value;
+        const subject = reportOptions[analizarValue];
+        if (subject) {
+            populateSelect(metricaSelect, subject.metrics);
+        }
+        updateGroupByOptions();
+    }
+
+    analizarSelect.addEventListener('change', updateMetricOptions);
+    metricaSelect.addEventListener('change', updateGroupByOptions);
+
+    reportForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const data = {
+            analizar: analizarSelect.value,
+            metrica: metricaSelect.value,
+            agrupar_por: agruparContainer.style.display === 'none' ? null : agruparSelect.value
+        };
+
+        try {
+            const response = await fetch("{% url 'generar_reporte_ajax' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+
+            if (customChart) customChart.destroy();
+            
+            customChartCtx.clearRect(0, 0, customChartCtx.canvas.width, customChartCtx.canvas.height);
+
+            if (result.success && result.data.length > 0) {
+                const chartType = chartTypeSelect.value;
+                const useSingleColor = chartType === 'line';
+                const showLegend = chartType === 'pie' || chartType === 'doughnut';
+                
+                customChart = new Chart(customChartCtx, {
+                    type: chartType,
+                    data: { 
+                        labels: result.labels, 
+                        datasets: [{ 
+                            label: 'Resultados', 
+                            data: result.data, 
+                            backgroundColor: useSingleColor ? colorPalette[0] : colorPalette,
+                            borderColor: colorPalette.map(c => c.replace('0.7', '1')),
+                            borderWidth: 1
+                        }] 
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        scales: { 
+                            y: { 
+                                beginAtZero: true,
+                                display: !showLegend
+                            },
+                             x: { 
+                                display: !showLegend
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: showLegend
+                            }
+                        }
+                    }
+                });
+            } else {
+                let message = "No se encontraron datos para este reporte.";
+                if (!result.success) {
+                    message = 'Error al generar el reporte: ' + result.error;
+                }
+                customChartCtx.font = "16px Arial";
+                customChartCtx.fillStyle = "grey";
+                customChartCtx.textAlign = "center";
+                customChartCtx.fillText(message, customChartCtx.canvas.width / 2, 50);
+            }
+        } catch (error) {
+            alert('Error de conexión con el servidor.');
+        }
+    });
+
+    updateMetricOptions();
+});
+</script>
+{% endblock %}

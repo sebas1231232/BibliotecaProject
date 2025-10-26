@@ -1,0 +1,87 @@
+{% extends 'GestionApp/base.html' %}
+{% block title %}Gestión de Multas{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <h2 class="text-3xl font-bold text-slate-700">Gestión de Multas</h2>
+    <div class="flex items-center gap-x-2">
+        <a href="?estado=Pendiente&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'Pendiente' %}bg-red-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Pendientes</a>
+        <a href="?estado=Pagada&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'Pagada' %}bg-green-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Pagadas</a>
+        <a href="?estado=todas&q={{query|default:''}}" class="px-4 py-2 text-sm font-medium rounded-md {% if estado_filtro == 'todas' %}bg-gray-600 text-white{% else %}bg-gray-200 text-gray-700{% endif %}">Todas</a>
+    </div>
+</div>
+<div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+    <div class="mb-4">
+        <form method="GET" action="">
+            <input type="hidden" name="estado" value="{{ estado_filtro }}">
+            <input type="text" name="q" value="{{ query|default:'' }}" class="block w-full md:w-1/3 p-2 border border-gray-300 rounded-md" placeholder="Buscar por nombre de usuario...">
+        </form>
+    </div>
+    <table class="w-full text-left">
+        <thead>
+            <tr class="border-b"><th class="py-2 px-2">ID Multa</th><th class="py-2 px-2">Usuario</th><th class="py-2 px-2">Monto</th><th class="py-2 px-2">Fecha Generación</th><th class="py-2 px-2">Estado</th><th class="py-2 px-2">Acción</th></tr>
+        </thead>
+        <tbody id="multas-table-body">
+            {% for multa in multas %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="py-3 px-2 text-sm text-gray-600">{{ multa.id_multa }}</td>
+                <td class="py-3 px-2 font-medium">{{ multa.usuario.nombre_completo }}</td>
+                <td class="py-3 px-2 font-semibold">${{ multa.monto_multa|floatformat:0 }}</td>
+                <td class="py-3 px-2 text-sm">{{ multa.fecha_generacion_multa|date:"Y-m-d" }}</td>
+                <td class="py-3 px-2">
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full 
+                        {% if multa.estado_multa.estado_multa == 'Pagada' %}bg-green-200 text-green-800{% else %}bg-red-200 text-red-800{% endif %}">
+                        {{ multa.estado_multa.estado_multa }}
+                    </span>
+                </td>
+                <td class="py-3 px-2">
+                    {% if multa.estado_multa.estado_multa == 'Pendiente' %}
+                        <button class="btn-pagar text-xs bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-3 rounded" data-url="{% url 'multa_pagar' multa_id=multa.id_multa %}">
+                            Marcar como Pagada
+                        </button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center py-10">No hay multas que coincidan con los filtros.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const multasTableBody = document.getElementById('multas-table-body');
+
+    if(multasTableBody) {
+        multasTableBody.addEventListener('click', async function(e) {
+            const target = e.target.closest('button');
+            if (!target || !target.classList.contains('btn-pagar')) return;
+
+            const url = target.dataset.url;
+            if (!url) return;
+            
+            if (!confirm('¿Estás seguro de que deseas marcar esta multa como pagada?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+                const data = await response.json();
+                alert(data.message || data.error);
+                if (data.success) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                alert('Error de conexión.');
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
